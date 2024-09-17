@@ -1,0 +1,15 @@
+version: "3.6"
+name: proxy
+services:
+  mongo:
+    image: mongo:latest
+    restart: always
+    ports:
+      - "27017:27017"
+  web:
+    restart: always
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
