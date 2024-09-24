@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"bufio"
@@ -163,7 +163,7 @@ func (p *Proxy) handleHTTPRequest(conn net.Conn, request *http.Request, port int
 	}
 
 	// сохраняем историю запроса
-	err = p.historyService.AddHistory(request, response)
+	_, err = p.historyService.AddHistory(request, response)
 	if err != nil {
 		log.Printf("Ошибка сохранения истории запроса: %s", err)
 	}
