@@ -2,6 +2,7 @@ package entity
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -45,16 +46,24 @@ func SerializeRequest(req *http.Request) (*SerializableRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // Reset the body for further use
+	req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	header := make(map[string]string)
 	for k, v := range req.Header {
 		header[k] = strings.Join(v, ", ")
 	}
 
+	var url string
+	if req.URL.String() == "/" {
+		// https запрос
+		url = fmt.Sprintf("https://%s%s", req.Host, req.URL.String())
+	} else {
+		url = req.URL.String()
+	}
+
 	return &SerializableRequest{
 		Method: req.Method,
-		URL:    req.URL.String(),
+		URL:    url,
 		Header: header,
 		Body:   string(bodyBytes),
 	}, nil

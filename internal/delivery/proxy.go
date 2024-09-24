@@ -49,6 +49,7 @@ func (p *Proxy) StartProxyServer(wg *sync.WaitGroup, addr string) error {
 		}
 	}()
 
+	log.Printf("Прокси-сервер запущен на %s", addr)
 	return nil
 }
 

@@ -34,6 +34,9 @@ func (h *History) RequestRepeat(id string) (string, error) {
 			// Отключаем следование переадресации
 			return http.ErrUseLastResponse
 		},
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // отключаем проверку сертификатов
+		},
 	}
 
 	// Отправляем запрос и получаем ответ

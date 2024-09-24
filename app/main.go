@@ -60,8 +60,9 @@ func main() {
 		if err := historyServer.Shutdown(ctx); err != nil {
 			log.Fatalf("Не удалось выполнить graceful shutdown для веб-сервера: %v", err)
 		}
-		log.Printf("Веб-сервер успешно остановлен")
+		log.Printf("Веб-сервер остановлен")
 		cancel()
+		wg.Done()
 	}()
 	// отключаем прокси
 	go func() {
@@ -69,8 +70,9 @@ func main() {
 		if err := proxyDelivery.Shutdown(ctx); err != nil {
 			log.Fatalf("Не удалось выполнить graceful shutdown для прокси-сервера: %v", err)
 		}
-		log.Printf("Прокси-сервер успешно остановлен")
+		log.Printf("Прокси-сервер остановлен")
 		cancel()
+		wg.Done()
 	}()
 	wg.Wait()
 }

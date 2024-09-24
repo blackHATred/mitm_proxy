@@ -53,6 +53,7 @@ func (h *History) StartHttpServer(wg *sync.WaitGroup, mux *http.ServeMux, addr s
 		}
 	}()
 
+	log.Printf("HTTP-сервер запущен на %s", addr)
 	return srv
 }
 
