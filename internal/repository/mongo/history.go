@@ -35,19 +35,19 @@ func NewHistoryRepository(db *mongo.Database) repository.History {
 }
 
 func (h *historyDB) GenerateCertificate(host string) (*tls.Certificate, error) {
-	// Генерация нового приватного ключа (ECDSA)
+	// генерация нового приватного ключа (ECDSA)
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка генерации ключа: %s", err)
 	}
 
-	// Создание серийного номера для сертификата
+	// создание серийного номера для сертификата
 	serialNumber, err := rand.Int(rand.Reader, big.NewInt(1000000))
 	if err != nil {
 		return nil, fmt.Errorf("ошибка генерации серийного номера: %s", err)
 	}
 
-	// Определение параметров сертификата
+	// определение параметров сертификата
 	certificate := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
@@ -61,7 +61,7 @@ func (h *historyDB) GenerateCertificate(host string) (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	// Добавляем IP-адреса и DNS-имена в сертификат
+	// добавляем IP-адреса и DNS-имена в сертификат
 	hosts := []string{host}
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
@@ -71,7 +71,7 @@ func (h *historyDB) GenerateCertificate(host string) (*tls.Certificate, error) {
 		}
 	}
 
-	// Генерация самоподписанного сертификата
+	// генерация самоподписанного сертификата
 	certBytes, err := x509.CreateCertificate(rand.Reader, &certificate, &certificate, &priv.PublicKey, priv)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка создания сертификата: %s", err)
@@ -103,23 +103,23 @@ func (h *historyDB) GenerateCertificate(host string) (*tls.Certificate, error) {
 }
 
 func (h *historyDB) GetCertificate(host string) (*tls.Certificate, error) {
-	// Поиск сертификата в базе данных
+	// поиск сертификата в базе данных
 	var certData bson.M
 	err := h.db.Collection("certificates").FindOne(h.ctx, bson.M{"host": host}).Decode(&certData)
 	if errors.Is(err, mongo.ErrNoDocuments) {
-		// Если сертификат не найден, генерируем новый
+		// если сертификат не найден, генерируем новый
 		cert, err := h.GenerateCertificate(host)
 		if err != nil {
 			return nil, fmt.Errorf("ошибка генерации сертификата: %s", err)
 		}
 
-		// Сериализуем сертификат и ключ в PEM-формат
+		// сериализуем сертификат и ключ в PEM-формат
 		certPEM := pem.EncodeToMemory(&pem.Block{
 			Type:  "CERTIFICATE",
 			Bytes: cert.Certificate[0],
 		})
 
-		// Приватный ключ должен быть маршализован правильно для ECDSA
+		// приватный ключ должен быть маршализован правильно для ECDSA
 		privKeyBytes, err := x509.MarshalECPrivateKey(cert.PrivateKey.(*ecdsa.PrivateKey))
 		if err != nil {
 			return nil, fmt.Errorf("ошибка маршалинга EC приватного ключа: %s", err)
@@ -130,7 +130,7 @@ func (h *historyDB) GetCertificate(host string) (*tls.Certificate, error) {
 			Bytes: privKeyBytes,
 		})
 
-		// Сохраняем сертификат и ключ в базу данных
+		// сохраняем сертификат и ключ в базу данных
 		_, err = h.db.Collection("certificates").InsertOne(h.ctx, bson.M{
 			"host":    host,
 			"certPEM": string(certPEM),
@@ -145,11 +145,11 @@ func (h *historyDB) GetCertificate(host string) (*tls.Certificate, error) {
 		return nil, fmt.Errorf("ошибка поиска сертификата в базе данных: %s", err)
 	}
 
-	// Десериализуем сертификат и ключ из PEM-формата
+	// десериализуем сертификат и ключ из PEM-формата
 	certPEM := certData["certPEM"].(string)
 	keyPEM := certData["keyPEM"].(string)
 
-	// Парсим ключ и сертификат
+	// парсим ключ и сертификат
 	tlsCert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
 	if err != nil {
 		return nil, fmt.Errorf("ошибка загрузки X509KeyPair из базы данных: %s", err)

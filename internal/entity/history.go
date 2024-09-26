@@ -70,13 +70,11 @@ func SerializeRequest(req *http.Request) (*SerializableRequest, error) {
 }
 
 func DeserializeRequest(serializedReq SerializableRequest) (*http.Request, error) {
-	// Создаем новый запрос
 	req, err := http.NewRequest(serializedReq.Method, serializedReq.URL, bytes.NewBufferString(serializedReq.Body))
 	if err != nil {
 		return nil, err
 	}
 
-	// Восстанавливаем заголовки
 	for k, v := range serializedReq.Header {
 		req.Header.Set(k, v)
 	}
@@ -89,7 +87,7 @@ func SerializeResponse(res *http.Response) (*SerializableResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // Reset the body for further use
+	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	header := make(map[string]string)
 	for k, v := range res.Header {

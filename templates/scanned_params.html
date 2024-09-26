@@ -1,0 +1,22 @@
+<table>
+    <thead>
+    <tr>
+        <th>Параметр</th>
+        <th>Запрос</th>
+        <th>Ответ</th>
+    </tr>
+    </thead>
+    <tbody>
+    {{range $param, $pair := .Param}}
+    <tr>
+        <td>{{$param}}</td>
+        <td>
+            <pre>{{printf "%+v" $pair.Request}}</pre>
+        </td>
+        <td>
+            <pre>{{printf "%+v" $pair.Response}}</pre>
+        </td>
+    </tr>
+    {{end}}
+    </tbody>
+</table>

@@ -2,7 +2,10 @@ module github.com/blackHATred/mitm_proxy
 
 go 1.22
 
-require go.mongodb.org/mongo-driver v1.16.1
+require (
+	github.com/gorilla/websocket v1.5.3
+	go.mongodb.org/mongo-driver v1.16.1
+)
 
 require (
 	github.com/golang/snappy v0.0.4 // indirect

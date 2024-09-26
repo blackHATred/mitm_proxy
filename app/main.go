@@ -18,9 +18,9 @@ import (
 )
 
 func main() {
-	var proxyURI = flag.String("proxy", ":8080", "Ссылка для подключения к прокси")
+	var proxyURI = flag.String("proxy", ":8000", "Ссылка для подключения к прокси")
 	var mongoURI = flag.String("db", "mongodb://localhost:27017", "Ссылка для подключения к Mongo")
-	var webAddr = flag.String("addr", ":8000", "Адрес web-интерфейса")
+	var webAddr = flag.String("addr", ":8080", "Адрес web-интерфейса")
 	flag.Parse()
 
 	wg := &sync.WaitGroup{}
@@ -39,12 +39,16 @@ func main() {
 	}
 
 	historyRepo := mongoRepo.NewHistoryRepository(db.Database("proxyDB"))
-	historyUC := service.NewHistoryUsecase(historyRepo)
+	historyUC, err := service.NewHistoryUsecase(historyRepo, "resources/params.txt")
+	if err != nil {
+		log.Fatalf("Произошла ошибка при инициализации: %v", err)
+	}
 	historyDelivery, err := delivery.NewHistoryDelivery(historyUC)
 	if err != nil {
 		log.Fatalf("Произошла ошибка при инициализации: %v", err)
 	}
-	proxyDelivery := delivery.NewProxy(historyUC)
+	proxyUsecase := service.NewProxyService(historyUC)
+	proxyDelivery := delivery.NewProxy(historyUC, proxyUsecase)
 	err = proxyDelivery.StartProxyServer(wg, *proxyURI)
 	if err != nil {
 		log.Fatalf("Произошла ошибка при запуске прокси-сервера: %v", err)
