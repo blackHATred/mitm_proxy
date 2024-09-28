@@ -10,6 +10,6 @@ type ProxyUsecase interface {
 	HandleConn(conn net.Conn) error
 	GetTLSConfig(host string) (*tls.Config, error)
 	HandleHTTPSConnect(conn net.Conn, req *http.Request) error
-	HandleHTTPRequest(conn net.Conn, request *http.Request, port int) error
+	HandleHTTPRequest(conn net.Conn, request *http.Request, tlsCfg *tls.Config) error
 	SendRequest(dial net.Conn, req *http.Request) (*http.Response, error)
 }

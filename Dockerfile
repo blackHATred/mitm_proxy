@@ -7,8 +7,6 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-COPY resources ./resources
-COPY templates ./templates
 
 RUN go build -o main app/main.go
 

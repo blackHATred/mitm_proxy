@@ -5,20 +5,31 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"net/url"
+	"time"
 )
 
 type SerializableRequest struct {
-	Method string            `bson:"method"`
-	URL    string            `bson:"url"`
-	Header map[string]string `bson:"header"`
-	Body   string            `bson:"body"`
+	Method        string         `bson:"method"`
+	URL           string         `bson:"url"`
+	Header        http.Header    `bson:"header"`
+	Body          string         `bson:"body"`
+	ContentLength int64          `bson:"content_length"`
+	Host          string         `bson:"host"`
+	Cookies       []*http.Cookie `bson:"cookies"`
+	PostForm      url.Values     `bson:"post_form"`
+	Form          url.Values     `bson:"form"` // Содержит и URL-параметры, и POST-параметры
+	Timestamp     time.Time      `bson:"timestamp"`
 }
 
 type SerializableResponse struct {
-	StatusCode int               `bson:"status_code"`
-	Header     map[string]string `bson:"header"`
-	Body       string            `bson:"body"`
+	Status        string         `bson:"status"`
+	StatusCode    int            `bson:"status_code"`
+	Header        http.Header    `bson:"header"`
+	Body          string         `bson:"body"`
+	ContentLength int64          `bson:"content_length"`
+	Cookies       []*http.Cookie `bson:"cookies"`
+	Timestamp     time.Time      `bson:"timestamp"`
 }
 
 type HistoryObject struct {
@@ -42,61 +53,88 @@ type RequestListElem struct {
 }
 
 func SerializeRequest(req *http.Request) (*SerializableRequest, error) {
-	bodyBytes, err := io.ReadAll(req.Body)
+	var u string
+	if req.URL.Hostname() == "" {
+		// https запрос
+		u = fmt.Sprintf("https://%s%s", req.Host, req.URL.String())
+	} else {
+		u = req.URL.String()
+	}
+
+	var body string
+	if req.Body != nil {
+		buf, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		body = string(buf)
+		req.Body = io.NopCloser(bytes.NewBuffer(buf))
+	}
+
+	err := req.ParseForm() // это парсит как query параметры, так и post параметры в формате application/x-www-form-urlencoded
 	if err != nil {
 		return nil, err
 	}
-	req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	header := make(map[string]string)
-	for k, v := range req.Header {
-		header[k] = strings.Join(v, ", ")
+	cookies := req.Cookies()
+
+	requestData := SerializableRequest{
+		Method:        req.Method,
+		URL:           u,
+		Header:        req.Header,
+		Body:          body,
+		ContentLength: req.ContentLength,
+		Host:          req.Host,
+		Cookies:       cookies,
+		PostForm:      req.PostForm,
+		Form:          req.Form,
+		Timestamp:     time.Now(),
 	}
-
-	var url string
-	if req.URL.String() == "/" {
-		// https запрос
-		url = fmt.Sprintf("https://%s%s", req.Host, req.URL.String())
-	} else {
-		url = req.URL.String()
-	}
-
-	return &SerializableRequest{
-		Method: req.Method,
-		URL:    url,
-		Header: header,
-		Body:   string(bodyBytes),
-	}, nil
+	return &requestData, nil
 }
 
 func DeserializeRequest(serializedReq SerializableRequest) (*http.Request, error) {
-	req, err := http.NewRequest(serializedReq.Method, serializedReq.URL, bytes.NewBufferString(serializedReq.Body))
+	req, err := http.NewRequest(serializedReq.Method, serializedReq.URL, bytes.NewBuffer([]byte(serializedReq.Body)))
 	if err != nil {
 		return nil, err
 	}
 
-	for k, v := range serializedReq.Header {
-		req.Header.Set(k, v)
+	req.Header = serializedReq.Header
+	req.ContentLength = serializedReq.ContentLength
+	req.Host = serializedReq.Host
+
+	for _, cookie := range serializedReq.Cookies {
+		req.AddCookie(cookie)
 	}
+
+	req.PostForm = serializedReq.PostForm
+	req.Form = serializedReq.Form
 
 	return req, nil
 }
 
 func SerializeResponse(res *http.Response) (*SerializableResponse, error) {
-	bodyBytes, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
+	var body string
+	if res.Body != nil {
+		buf, err := io.ReadAll(res.Body)
+		if err != nil {
+			return nil, err
+		}
+		body = string(buf)
+		res.Body = io.NopCloser(bytes.NewBuffer(buf))
 	}
-	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	header := make(map[string]string)
-	for k, v := range res.Header {
-		header[k] = strings.Join(v, ", ")
+	cookies := res.Cookies()
+
+	responseData := SerializableResponse{
+		Status:        res.Status,
+		StatusCode:    res.StatusCode,
+		Header:        res.Header,
+		Body:          body,
+		ContentLength: res.ContentLength,
+		Cookies:       cookies,
+		Timestamp:     time.Now(),
 	}
 
-	return &SerializableResponse{
-		StatusCode: res.StatusCode,
-		Header:     header,
-		Body:       string(bodyBytes),
-	}, nil
+	return &responseData, nil
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strconv"
 )
 
 type Proxy struct {
@@ -33,31 +33,20 @@ func (p Proxy) HandleConn(conn net.Conn) error {
 
 	// если это HTTPS-запрос (CONNECT), то обрабатываем его отдельно
 	if request.Method == http.MethodConnect {
-		err = p.HandleHTTPSConnect(conn, request)
-	} else if request.URL.Port() == "" {
-		// обычная обработка HTTP-запросов
-		err = p.HandleHTTPRequest(conn, request, 80)
-	} else {
-		// HTTP-запрос на нестандартном порте
-		portStr := request.URL.Port()
-		port, e := strconv.Atoi(portStr)
-		if e != nil {
-			return fmt.Errorf("ошибка преобразования порта: %s", e)
-		}
-		err = p.HandleHTTPRequest(conn, request, port)
+		return p.HandleHTTPSConnect(conn, request)
 	}
-	return err
+	return p.HandleHTTPRequest(conn, request, nil)
 }
 
 func (p Proxy) GetTLSConfig(host string) (*tls.Config, error) {
-	// если сертификат уже сгенерирован, то используем его, иначе - генерируем и сохраняем
 	cert, err := p.historyUsecase.GetCertificate(host)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Ошибка получения сертификата: %s", err))
+		return nil, fmt.Errorf("ошибка получения сертификата: %s", err)
 	}
 
 	return &tls.Config{
 		Certificates: []tls.Certificate{*cert},
+		ServerName:   host,
 	}, nil
 }
 
@@ -69,7 +58,7 @@ func (p Proxy) HandleHTTPSConnect(conn net.Conn, req *http.Request) error {
 	}
 
 	// установка TLS-туннеля
-	tlsCfg, err := p.GetTLSConfig(req.Host)
+	tlsCfg, err := p.GetTLSConfig(req.URL.Hostname())
 	if err != nil {
 		return fmt.Errorf("ошибка получения TLS-конфигурации: %s", err)
 	}
@@ -85,7 +74,7 @@ func (p Proxy) HandleHTTPSConnect(conn net.Conn, req *http.Request) error {
 		if err != nil {
 			return fmt.Errorf("ошибка чтения HTTPS-запроса: %s", err)
 		}
-		err = p.HandleHTTPRequest(tlsConn, request, 443)
+		err = p.HandleHTTPRequest(tlsConn, request, tlsCfg)
 		if err != nil {
 			return fmt.Errorf("ошибка обработки HTTPS-запроса: %s", err)
 		}
@@ -94,19 +83,20 @@ func (p Proxy) HandleHTTPSConnect(conn net.Conn, req *http.Request) error {
 	return nil
 }
 
-func (p Proxy) HandleHTTPRequest(conn net.Conn, request *http.Request, port int) error {
-	log.Println(request.Method, request.URL)
+func (p Proxy) HandleHTTPRequest(conn net.Conn, request *http.Request, tlsCfg *tls.Config) error {
+	log.Println(request.Method, request.Host, request.RequestURI)
 	request.Header.Del("Proxy-Connection")
+	request.Header.Del("Accept-Encoding")
 	var err error
 	var dial net.Conn
-	if port == 443 {
-		tlsCfg, err := p.GetTLSConfig(request.URL.Host)
-		if err != nil {
-			return fmt.Errorf("ошибка получения TLS-конфигурации: %s", err)
-		}
-		dial, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", request.Host, port), tlsCfg)
+	if tlsCfg != nil {
+		dial, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", request.Host, 443), tlsCfg)
 	} else {
-		dial, err = net.Dial("tcp", fmt.Sprintf("%s:%d", request.URL.Hostname(), port))
+		port := "80"
+		if request.URL.Port() != "" {
+			port = request.URL.Port()
+		}
+		dial, err = net.Dial("tcp", fmt.Sprintf("%s:%s", request.URL.Hostname(), port))
 	}
 	if err != nil {
 		return fmt.Errorf("ошибка подключения к хосту: %s", err)
@@ -131,6 +121,15 @@ func (p Proxy) HandleHTTPRequest(conn net.Conn, request *http.Request, port int)
 }
 
 func (p Proxy) SendRequest(dial net.Conn, req *http.Request) (*http.Response, error) {
+	// чтобы тело можно было читать повторно в других местах
+	if req.Body != nil {
+		buf, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		req.Body = io.NopCloser(bytes.NewBuffer(buf))
+	}
+
 	// отправка запроса
 	err := req.Write(dial)
 	if err != nil {

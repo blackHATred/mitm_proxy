@@ -19,40 +19,73 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
 type historyDB struct {
-	db  *mongo.Database
-	ctx context.Context
+	db     *mongo.Database
+	ctx    context.Context
+	caKey  *tls.Certificate
+	caCert *x509.Certificate
 }
 
-func NewHistoryRepository(db *mongo.Database) repository.History {
+func NewHistoryRepository(db *mongo.Database, caKeyFilename, caCertFilename string) (repository.History, error) {
+	// Загрузка приватного ключа CA
+	caKeyPEM, err := os.ReadFile(caKeyFilename)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка чтения ключа CA: %s", err)
+	}
+	caKeyBlock, _ := pem.Decode(caKeyPEM)
+	caKey, err := x509.ParsePKCS8PrivateKey(caKeyBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка парсинга ключа CA: %s", err)
+	}
+
+	// Загрузка сертификата CA
+	caCertPEM, err := os.ReadFile(caCertFilename)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка чтения сертификата CA: %s", err)
+	}
+	caCertBlock, _ := pem.Decode(caCertPEM)
+	if caCertBlock == nil || caCertBlock.Type != "CERTIFICATE" {
+		return nil, errors.New("некорректный PEM блок для сертификата CA")
+	}
+	caCert, err := x509.ParseCertificate(caCertBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка парсинга сертификата CA: %s", err)
+	}
+
 	return &historyDB{
 		db:  db,
 		ctx: context.Background(),
-	}
+		caKey: &tls.Certificate{
+			Certificate: [][]byte{caCert.Raw},
+			PrivateKey:  caKey,
+		},
+		caCert: caCert,
+	}, nil
 }
 
 func (h *historyDB) GenerateCertificate(host string) (*tls.Certificate, error) {
-	// генерация нового приватного ключа (ECDSA)
+	// Генерация нового приватного ключа (ECDSA)
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка генерации ключа: %s", err)
 	}
 
-	// создание серийного номера для сертификата
+	// Создание серийного номера для сертификата
 	serialNumber, err := rand.Int(rand.Reader, big.NewInt(1000000))
 	if err != nil {
 		return nil, fmt.Errorf("ошибка генерации серийного номера: %s", err)
 	}
 
-	// определение параметров сертификата
-	certificate := x509.Certificate{
+	// Определение параметров временного сертификата
+	certTemplate := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			CommonName:   host,
-			Organization: []string{"Крутой прокси с MITM"},
+			Organization: []string{"Organization"},
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(365 * 24 * time.Hour), // 1 год
@@ -61,34 +94,34 @@ func (h *historyDB) GenerateCertificate(host string) (*tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	// добавляем IP-адреса и DNS-имена в сертификат
+	// Добавляем IP-адреса и DNS-имена в сертификат
 	hosts := []string{host}
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
-			certificate.IPAddresses = append(certificate.IPAddresses, ip)
+			certTemplate.IPAddresses = append(certTemplate.IPAddresses, ip)
 		} else {
-			certificate.DNSNames = append(certificate.DNSNames, h)
+			certTemplate.DNSNames = append(certTemplate.DNSNames, h)
 		}
 	}
 
-	// генерация самоподписанного сертификата
-	certBytes, err := x509.CreateCertificate(rand.Reader, &certificate, &certificate, &priv.PublicKey, priv)
+	// Подписываем временный сертификат корневым сертификатом (CA)
+	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemplate, h.caCert, &priv.PublicKey, h.caKey.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка создания сертификата: %s", err)
 	}
 
-	ECPrivateKey, err := x509.MarshalECPrivateKey(priv)
+	// Приватный ключ ECDSA в PEM-формате
+	privBytes, err := x509.MarshalECPrivateKey(priv)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка маршалинга EC-ключа: %s", err)
+		return nil, fmt.Errorf("ошибка маршалинга приватного ключа: %s", err)
 	}
 
-	// переводим ключ в PEM-формат
 	keyPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "EC PRIVATE KEY",
-		Bytes: ECPrivateKey,
+		Bytes: privBytes,
 	})
 
-	// переводим сертификат в PEM-формат
+	// Сертификат в PEM-формате
 	certPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,

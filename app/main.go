@@ -20,7 +20,9 @@ import (
 func main() {
 	var proxyURI = flag.String("proxy", ":8000", "Ссылка для подключения к прокси")
 	var mongoURI = flag.String("db", "mongodb://localhost:27017", "Ссылка для подключения к Mongo")
-	var webAddr = flag.String("addr", ":8080", "Адрес web-интерфейса")
+	var webAddr = flag.String("web", ":8080", "Адрес web-интерфейса")
+	var caKeyFilename = flag.String("ca-key", "ca.key", "Путь до корневого самоподписанного сертификата")
+	var caCertFilename = flag.String("ca-cert", "ca.crt", "Путь до корневого самоподписанного сертификата для клиентов")
 	flag.Parse()
 
 	wg := &sync.WaitGroup{}
@@ -38,7 +40,10 @@ func main() {
 		log.Fatalf("Не удалось подключиться к MongoDB: %v", err)
 	}
 
-	historyRepo := mongoRepo.NewHistoryRepository(db.Database("proxyDB"))
+	historyRepo, err := mongoRepo.NewHistoryRepository(db.Database("proxyDB"), *caKeyFilename, *caCertFilename)
+	if err != nil {
+		log.Fatalf("Произошла ошибка при инициализации: %v", err)
+	}
 	historyUC, err := service.NewHistoryUsecase(historyRepo, "resources/params.txt")
 	if err != nil {
 		log.Fatalf("Произошла ошибка при инициализации: %v", err)

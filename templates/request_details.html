@@ -8,6 +8,7 @@
 <body>
 <div class="container mt-4">
     <div class="table-responsive">
+        <h2>Request</h2>
         <table class="table table-bordered">
             <thead class="thead-dark">
             <tr><th>Field</th><th>Value</th></tr>
@@ -17,9 +18,29 @@
             <tr><td>URL</td><td>{{.Request.URL}}</td></tr>
             <tr><td>Request Headers</td><td>{{.Request.Header}}</td></tr>
             <tr><td>Request Body</td><td>{{.Request.Body}}</td></tr>
+            <tr><td>Content Length</td><td>{{.Request.ContentLength}}</td></tr>
+            <tr><td>Host</td><td>{{.Request.Host}}</td></tr>
+            <tr><td>Cookies</td><td>{{.Request.Cookies}}</td></tr>
+            <tr><td>Post form</td><td>{{.Request.PostForm}}</td></tr>
+            <tr><td>Form</td><td>{{.Request.Form}}</td></tr>
+            <tr><td>Timestamp</td><td>{{.Request.Timestamp}}</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="table-responsive mt-4">
+        <h2>Response</h2>
+        <table class="table table-bordered">
+            <thead class="thead-dark">
+            <tr><th>Field</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>Status</td><td>{{.Response.Status}}</td></tr>
             <tr><td>Status Code</td><td>{{.Response.StatusCode}}</td></tr>
             <tr><td>Response Headers</td><td>{{.Response.Header}}</td></tr>
             <tr><td>Response Body</td><td>{{.Response.Body}}</td></tr>
+            <tr><td>Content Length</td><td>{{.Response.ContentLength}}</td></tr>
+            <tr><td>Cookies</td><td>{{.Response.Cookies}}</td></tr>
+            <tr><td>Timestamp</td><td>{{.Response.Timestamp}}</td></tr>
             </tbody>
         </table>
     </div>
